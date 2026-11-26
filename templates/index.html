@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EchoVision</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;height:100vh;background:#05070f;color:#e6e9f5;font-family:system-ui,sans-serif;
+       display:grid;grid-template-columns:1.2fr 1fr;gap:20px;padding:20px}
+  @media(max-width:900px){body{grid-template-columns:1fr;height:auto}}
+  .card{background:#0a0f1f;border:1px solid #1e2a4a;border-radius:16px;padding:16px;
+        display:flex;flex-direction:column;gap:12px;min-height:0}
+  h1{margin:0;font-weight:600;font-size:22px;
+     background:linear-gradient(90deg,#a855f7,#3b82f6,#22d3ee);
+     -webkit-background-clip:text;color:transparent}
+  .top{display:flex;justify-content:space-between;align-items:center}
+  #status{padding:6px 12px;border-radius:999px;font-size:13px;border:1px solid #22d3ee;color:#22d3ee}
+  video{width:100%;border-radius:12px;background:#000;aspect-ratio:4/3;object-fit:cover}
+  button{padding:12px 20px;border:0;border-radius:10px;color:#fff;cursor:pointer;font-size:15px;
+         background:linear-gradient(90deg,#7c3aed,#2563eb)}
+  button.stop{background:#3a1020}
+  #chat{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:10px;min-height:300px}
+  .msg{padding:10px 14px;border-radius:12px;max-width:90%;line-height:1.4;font-size:15px}
+  .you{align-self:flex-end;background:#1d2b57}
+  .bot{align-self:flex-start;background:#16203d;border:1px solid #2a3a6a}
+  .sys{align-self:center;color:#7d89b0;font-size:13px}
+  .row{display:flex;gap:8px}
+  input{flex:1;padding:12px;border-radius:10px;border:1px solid #1e2a4a;background:#05070f;color:#e6e9f5}
+  button.live{background:#dc2626}
+  button.mode{background:#10163a;border:1px solid #2a3a6a;flex:1}
+button.mode.on{background:linear-gradient(90deg,#7c3aed,#2563eb);border-color:transparent}
+.msg{white-space:pre-line}
+select{padding:12px;border-radius:10px;border:1px solid #2a3a6a;background:#10163a;color:#e6e9f5}
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="top"><h1>EchoVision</h1><span id="status">Idle</span></div>
+    <video id="cam" autoplay playsinline muted></video>
+    <div class="row">
+      <button id="startBtn">Start</button>
+            <button id="stopBtn" class="stop">Stop</button>
+    </div>
+    <div class="row">
+      <button id="modeNormal" class="mode on">Normal</button>
+            <button id="modeNav" class="mode">Navigation</button>
+    </div>
+    <div class="row">
+      <button id="trBtn" class="mode">Translate sign</button>
+      <select id="engine">
+        <option value="local">Offline</option>
+        <option value="gemini">Gemini (explains)</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="card">
+    <div id="chat"></div>
+    <div class="row">
+      <input id="typed" placeholder="Or type a question...">
+      <button id="micBtn">🎤</button>
+      <button id="sendBtn">Send</button>
+    </div>
+  </div>
+
+<script>
+   const $ = id => document.getElementById(id);
+const cam = $("cam"), chat = $("chat"), statusEl = $("status");
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec, stream, actx, curUtt, voice;
+let running = false, began = false, speaking = false, spokenText = "", reqId = 0;
+let mode = "normal", userBusy = false, lastNav = "", navRunning = false;
+let pendingNav = "";
+
+const DESCRIBE = "Describe this scene for a blind person in three short sentences. " +
+  "First the setting, then the main objects and where they are (left, right, ahead), " +
+  "then anything important like people, stairs, doors or text.";
+const WRAP = "Answer for a blind person in one or two short, clear sentences. " +
+  "Say where things are (left, right, ahead). ";
+const NAV_PROMPT = "I am a blind person walking. In one short sentence, tell me what is " +
+  "directly ahead. Mention any person, vehicle, stairs, door or obstacle and its direction " +
+  "(left, right, ahead). If the way is clear, say the path is clear.";
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+function setStatus(t){ statusEl.textContent = t; }
+function add(cls, text){
+  const d = document.createElement("div");
+  d.className = "msg " + cls; d.textContent = text;
+  chat.appendChild(d); chat.scrollTop = chat.scrollHeight;
+}
+
+function beep(freq, dur){
+  actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+  const o = actx.createOscillator(), g = actx.createGain();
+  o.frequency.value = freq; g.gain.value = 0.2;
+  o.connect(g); g.connect(actx.destination);
+  o.start(); o.stop(actx.currentTime + dur);
+}
+function startBeep(){ beep(660, 0.12); setTimeout(() => beep(990, 0.15), 150); }
+function stopBeep(){ beep(440, 0.25); }
+
+// ---- natural voice ----
+function pickVoice(){
+  const v = speechSynthesis.getVoices();
+  voice = v.find(x => /Natural/i.test(x.name) && /^en/i.test(x.lang))
+       || v.find(x => /Google US English/i.test(x.name))
+       || v.find(x => /Aria|Jenny|Zira/i.test(x.name))
+       || v.find(x => /^en/i.test(x.lang));
+}
+speechSynthesis.onvoiceschanged = pickVoice; pickVoice();
+
+// ---- make text sound human ----
+function humanize(t, auto){
+  t = t.replace(/[*_#`]/g, "").replace(/\s+/g, " ").trim();
+  t = t.replace(/^(the|this) (image|picture|photo|scene) (shows|depicts|features|contains)\s*/i, "I can see ")
+       .replace(/^in (the|this) (image|picture|photo),?\s*/i, "");
+  t = t.charAt(0).toUpperCase() + t.slice(1);
+  if (!/[.!?]$/.test(t)) t += ".";
+  if (!auto) {
+    const o = ["Okay, ", "Alright, ", "Sure, ", ""][Math.floor(Math.random() * 4)];
+    if (o) t = o + (t.startsWith("I ") ? t : t.charAt(0).toLowerCase() + t.slice(1));
+  }
+  return t;
+}
+
+function speak(text, rate = 0.95){
+  return new Promise(res => {
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    if (voice) u.voice = voice;
+    u.rate = rate; u.pitch = 1;
+    curUtt = u; spokenText = text.toLowerCase(); speaking = true;
+    u.onend = u.onerror = () => { if (curUtt === u) speaking = false; res(); };
+    setStatus("Speaking");
+    speechSynthesis.speak(u);
+  });
+}
+function stopSpeaking(){ speechSynthesis.cancel(); speaking = false; }
+
+function isEcho(t){
+  if (!speaking) return false;
+  const words = t.split(/\s+/).filter(Boolean);
+  if (!words.length) return false;
+  return words.filter(w => spokenText.includes(w)).length / words.length > 0.7;
+}
+
+function grabFrame(){
+  const w = Math.min(cam.videoWidth, 640);
+  const h = Math.round(cam.videoHeight * w / cam.videoWidth);
+  const c = document.createElement("canvas"); c.width = w; c.height = h;
+  c.getContext("2d").drawImage(cam, 0, 0, w, h);
+  return new Promise(r => c.toBlob(r, "image/jpeg", 0.85));
+}
+
+function buildQ(raw){
+  return /describe|surround|around me|where am i|what do you see/i.test(raw) ? DESCRIBE : WRAP + raw;
+}
+
+async function ask(question, label, auto = false){
+  const id = ++reqId;
+  stopSpeaking();
+  if (!auto) { userBusy = true; add("you", label || question); }
+  setStatus(auto ? "Guiding" : "Thinking");
+  try {
+    const fd = new FormData();
+    fd.append("image", await grabFrame(), "frame.jpg");
+    fd.append("question", question);
+    const res = await fetch("/ask", { method:"POST", body:fd });
+    const data = await res.json();
+    if (id !== reqId) return;
+    if (auto && mode !== "nav") return;
+    const raw = data.answer || data.response || data.result || JSON.stringify(data);
+    const text = humanize(raw, auto);
+    if (auto) {
+      const key = text.toLowerCase();
+      if (key === lastNav) return;      // nothing new, stay quiet
+      lastNav = key;
+    }
+    add("bot", text);
+    await speak(text, auto ? 1.05 : 0.95);
+  } catch(e){
+    if (id === reqId) add("sys", "Error: " + e.message);
+  }
+  if (id === reqId) { if (!auto) userBusy = false; if (running) setStatus(mode === "nav" ? "Guiding" : "Listening"); }
+}
+function navLine(objs){
+  const near = objs.filter(o => o.distance !== "far").slice(0, 3);
+  if (!near.length) return "Path is clear.";
+  const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+  return near.map(o => cap(o.label) + " " + o.direction + ", " + o.distance).join(". ") + ".";
+}
+
+async function navStep(){
+  const fd = new FormData();
+  fd.append("image", await grabFrame(), "frame.jpg");
+  const res = await fetch("/detect", { method:"POST", body:fd });
+  const data = await res.json();
+  if (mode !== "nav" || userBusy) return;
+  const line = navLine(data.objects || []);
+    if (line !== pendingNav) { pendingNav = line; return; }  // needs 2 matching scans
+  if (line === lastNav) return;
+  lastNav = line;
+  add("bot", line);
+  await speak(line, 1.05);
+}
+// ---- navigation loop ----
+async function navLoop(){
+  if (navRunning) return;
+  navRunning = true;
+  while (running && mode === "nav") {
+    while ((userBusy || speaking) && running && mode === "nav") await sleep(300);
+    if (!running || mode !== "nav") break;
+        try { await navStep(); } catch(e){ add("sys", "Nav error: " + e.message); await sleep(2000); }
+    await sleep(500);
+  }
+  navRunning = false;
+}
+
+function setMode(m){
+  if (m === mode) return;
+  if (m === "nav" && !running) return add("sys", "Press Start first.");
+  mode = m;
+  $("modeNormal").classList.toggle("on", m === "normal");
+  $("modeNav").classList.toggle("on", m === "nav");
+  if (m === "nav") {
+    began = true; lastNav = "";
+    add("sys", "Navigation mode on. Say stop to pause.");
+    speak("Navigation on. I'll guide you as you walk. Say stop to pause.");
+    navLoop();
+  } else {
+    add("sys", "Normal mode.");
+    if (running) speak("Okay, navigation paused.");
+  }
+}
+
+function silence(){
+  stopSpeaking();
+  if (mode === "nav") setMode("normal");
+  else { stopBeep(); add("sys", "Stopped speaking."); }
+  setStatus("Listening");
+}
+async function translateSign(){
+  if (!running) return add("sys", "Press Start first.");
+  const id = ++reqId;
+  stopSpeaking();
+  userBusy = true;
+  add("you", "Translate this sign");
+  setStatus("Reading sign");
+  try {
+    const fd = new FormData();
+    fd.append("image", await grabFrame(), "frame.jpg");
+    const gem = $("engine").value === "gemini";
+    const res = await fetch(gem ? "/translate_ai" : "/translate", { method:"POST", body:fd });
+    const data = await res.json();
+    if (id !== reqId) return;
+    if (data.error) throw new Error(data.error);
+
+    const items = gem
+      ? (data.signs || [])
+      : (data.lines || []).filter(l => l.original !== l.translated)
+          .map(l => ({ language: data.lang, original: l.original, translation: l.translated }));
+
+    if (!items.length) {
+      const m = "I couldn't find any foreign text. Try moving closer.";
+      add("bot", m); await speak(m);
+    } else {
+      items.forEach(s => add("bot",
+        (s.language ? s.language + ": " : "") + s.original + "\n\u2192 " + s.translation +
+        (s.explanation ? "\n" + s.explanation : "")));
+      await speak(items.map(s => "It says: " + s.translation + "." +
+        (s.explanation ? " " + s.explanation : "")).join(" "));
+    }
+  } catch(e){
+    if (id === reqId) add("sys", "Translate error: " + e.message);
+  }
+  if (id === reqId) { userBusy = false; if (running) setStatus(mode === "nav" ? "Guiding" : "Listening"); }
+}
+function handle(raw){
+  const t = raw.toLowerCase().replace(/[.,!?]/g, "").trim();
+  if (!t || isEcho(t)) return;
+
+  if (/\bstop\b/.test(t)) {
+    if (speaking || mode === "nav") silence(); else stopAll();
+    return;
+  }
+  if (!began) {
+    if (t.includes("start")) {
+      began = true; startBeep();
+      add("sys", 'Started. Ask me anything, or say "guide me" for navigation.');
+      setStatus("Listening");
+    } else add("sys", 'Heard "' + raw + '". Say "start" to begin.');
+    return;
+  }
+  if (/translate|what does (this|that) (sign )?say|read (this|the) sign/.test(t)) return translateSign();
+  if (/navigation mode|start navigation|guide me|navigate/.test(t)) return setMode("nav");
+  if (/normal mode/.test(t)) return setMode("normal");
+  ask(buildQ(raw), raw);
+}
+
+function listen(){ if (running) { try { rec.start(); } catch(e){} } }
+
+async function startAll(){
+  if (!SR) return add("sys", "Voice not supported. Use Chrome or Edge.");
+  if (running) return;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video:true, audio:true });
+  } catch(e){ return add("sys", "Camera/mic error: " + e.message); }
+  cam.srcObject = stream;
+  rec = new SR(); rec.lang = "en-US"; rec.continuous = true; rec.interimResults = true;
+  let lastStop = 0;
+  rec.onresult = e => {
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const r = e.results[i], t = r[0].transcript.toLowerCase();
+      const hasStop = /\bstop\b/.test(t);
+      if (!r.isFinal) {
+        if (hasStop && (speaking || mode === "nav") && Date.now() - lastStop > 3000) {
+          lastStop = Date.now(); silence();
+        }
+        continue;
+      }
+      if (hasStop && Date.now() - lastStop < 3000) continue;
+      handle(r[0].transcript);
+    }
+  };
+  rec.onstart = () => { $("micBtn").classList.add("live"); if (!speaking) setStatus(began ? "Listening" : 'Say "start"'); };
+  rec.onend = () => { $("micBtn").classList.remove("live"); listen(); };
+  rec.onerror = e => { if (e.error !== "no-speech" && e.error !== "aborted") add("sys", "Mic error: " + e.error); };
+  running = true; began = false;
+  add("sys", 'Camera on. Say "start" to begin.');
+  listen();
+}
+
+function stopAll(){
+  running = false; began = false; userBusy = false; reqId++;
+  mode = "normal";
+  $("modeNormal").classList.add("on"); $("modeNav").classList.remove("on");
+  try { rec && rec.stop(); } catch(e){}
+  stopSpeaking();
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  cam.srcObject = null;
+  stopBeep(); setStatus("Idle"); add("sys", "Stopped.");
+}
+
+$("startBtn").onclick = startAll;
+$("trBtn").onclick = translateSign;
+$("micBtn").onclick = () => { if (!running) startAll(); };
+$("stopBtn").onclick = stopAll;
+$("modeNormal").onclick = () => setMode("normal");
+$("modeNav").onclick = () => setMode("nav");
+$("sendBtn").onclick = () => {
+  const v = $("typed").value.trim(); $("typed").value = "";
+  if (running && v) { began = true; ask(buildQ(v), v); }
+};
+$("typed").onkeydown = e => { if (e.key === "Enter") $("sendBtn").click(); };
+</script>
+</body>
+</html>

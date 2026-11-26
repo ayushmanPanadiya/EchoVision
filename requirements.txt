@@ -1,0 +1,9 @@
+flask
+flask-cors
+pillow
+numpy
+transformers==4.51.3
+ultralytics
+easyocr
+argostranslate
+google-genai

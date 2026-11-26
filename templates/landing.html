@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EchoVision - Your Real-World AI Companion</title>
+<style>
+  *{box-sizing:border-box}
+  :root{--bg:#05060f;--card:#0b0f23;--line:#1e2548;--txt:#e8eaf8;--mut:#8a93b8;
+        --grad:linear-gradient(90deg,#a855f7,#3b82f6,#22d3ee)}
+  body{margin:0;background:radial-gradient(1200px 600px at 80% -10%,#2a1466 0%,transparent 60%),var(--bg);
+       color:var(--txt);font-family:system-ui,sans-serif}
+  a{color:inherit;text-decoration:none}
+  .wrap{max-width:1200px;margin:auto;padding:0 24px}
+  nav{display:flex;justify-content:space-between;align-items:center;padding:22px 0}
+  .logo{font-size:24px;font-weight:700}
+  .logo span,.grad{background:var(--grad);-webkit-background-clip:text;color:transparent}
+  .links{display:flex;gap:28px;color:var(--mut)}
+  .btn{display:inline-block;padding:13px 24px;border-radius:999px;color:#fff;font-weight:600;
+       background:linear-gradient(90deg,#7c3aed,#4f46e5)}
+  .btn.ghost{background:transparent;border:1px solid var(--line)}
+  .hero{display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:center;padding:50px 0}
+  .tag{display:inline-block;padding:8px 16px;border:1px solid var(--line);border-radius:999px;
+       color:var(--mut);font-size:13px;letter-spacing:1px}
+  h1{font-size:58px;line-height:1.05;margin:20px 0}
+  .sub{color:var(--mut);font-size:18px;line-height:1.6;max-width:520px}
+  .cta{display:flex;gap:14px;margin:28px 0}
+  .pills{display:flex;gap:24px;color:var(--mut);font-size:13px;flex-wrap:wrap}
+  .preview{background:var(--card);border:1px solid #3b2a8a;border-radius:24px;padding:16px;
+           display:grid;grid-template-columns:1.2fr 1fr;gap:12px;box-shadow:0 0 60px #4c1d9540}
+  .cam{border-radius:16px;min-height:300px;position:relative;
+       background:linear-gradient(160deg,#3a2a1a,#101a2a)}
+  .live{position:absolute;top:12px;right:12px;background:#000a;padding:5px 12px;
+        border-radius:8px;font-size:12px}
+  .live:before{content:"";display:inline-block;width:8px;height:8px;background:#22c55e;
+        border-radius:50%;margin-right:6px}
+  .chat{display:flex;flex-direction:column;gap:10px;font-size:13px}
+  .bub{background:#10163a;border:1px solid var(--line);border-radius:12px;padding:12px;line-height:1.5}
+  h2{text-align:center;font-size:32px;margin:60px 0 8px}
+  .center{text-align:center;color:var(--mut)}
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin:30px 0}
+  .box{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px}
+  .box b{display:block;margin-bottom:8px}
+  .box p{margin:0;color:var(--mut);font-size:14px;line-height:1.5}
+  .num{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;margin-bottom:12px;
+       background:linear-gradient(135deg,#7c3aed,#2563eb);font-weight:700}
+  footer{text-align:center;color:var(--mut);padding:40px 0;font-size:13px}
+  @media(max-width:900px){.hero,.preview{grid-template-columns:1fr}.grid{grid-template-columns:1fr 1fr}
+       h1{font-size:42px}.links{display:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav>
+    <div class="logo">Echo<span>Vision</span></div>
+    <div class="links"><a href="#how">How it Works</a><a href="#features">Features</a><a href="#use">Use Cases</a></div>
+    <a class="btn" href="/ui">Try Now &rarr;</a>
+  </nav>
+
+  <section class="hero">
+    <div>
+      <span class="tag">SEE &bull; ASK &bull; LISTEN &bull; EXPLORE</span>
+      <h1>Your Real-World <span class="grad">AI Companion</span></h1>
+      <p class="sub">Use your camera to understand the world around you. Ask questions, get real-time
+        answers, and listen to natural voice responses, powered by Moondream 2 and Gemini, online or offline.</p>
+      <div class="cta">
+        <a class="btn" href="/ui">Try EchoVision &rarr;</a>
+        <a class="btn ghost" href="#how">How it works</a>
+      </div>
+      <div class="pills"><span>Runs locally<br>(optional offline mode)</span>
+        <span>Real-time<br>camera understanding</span><span>Voice responses<br>(text-to-speech)</span></div>
+    </div>
+    <div class="preview">
+      <div class="cam"><span class="live">Live</span></div>
+      <div class="chat">
+        <div class="bub">What objects are around me?</div>
+        <div class="bub">You are at a study desk. I can see a laptop, a notebook, a pen, a water bottle
+          and a small plant. Would you like me to read the notebook?</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="how">
+    <h2>How It Works</h2>
+    <p class="center">Start exploring your surroundings in a few steps.</p>
+    <div class="grid">
+      <div class="box"><div class="num">1</div><b>Open Camera</b><p>Capture a live feed of your surroundings.</p></div>
+      <div class="box"><div class="num">2</div><b>Ask a Question</b><p>Use your voice to ask about objects, text, or places.</p></div>
+      <div class="box"><div class="num">3</div><b>Get Answer</b><p>Moondream 2 (local) or Gemini (online) responds.</p></div>
+      <div class="box"><div class="num">4</div><b>Listen</b><p>The answer is spoken aloud. Ask follow-ups to keep exploring.</p></div>
+    </div>
+  </section>
+
+  <section id="use">
+    <h2>Use Cases</h2>
+    <div class="grid">
+      <div class="box"><b>Explore Places</b><p>Understand buildings, landmarks and surroundings.</p></div>
+      <div class="box"><b>Read &amp; Listen</b><p>Read signboards, documents and books.</p></div>
+      <div class="box"><b>Identify Objects</b><p>Recognize everyday items around you.</p></div>
+      <div class="box"><b>Everyday Assistance</b><p>Get instant spoken answers in real time.</p></div>
+    </div>
+  </section>
+  <footer>EchoVision &copy; 2026</footer>
+</div>
+</body>
+</html>
