@@ -51,4 +51,4 @@ Requires an NVIDIA GPU (developed on an RTX 4050, 6 GB).
 - This is an awareness aid. It does not replace a cane, a guide dog or the user's own judgement.
 
 ## Author
-Ayushman Panadiya, B.Tech AI and ML, Galgotias College of Engineering and Technology.
+Ayushman Panadiya
